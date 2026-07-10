@@ -27,7 +27,7 @@ jobs:
             echo "-----------------------------------"
             echo "Checking: $TARGET"
             
-            git clone --depth 1 https://github.com{TARGET}.git temp_repo 2>/dev/null
+            git clone --depth 1 https://github.com/${TARGET}.git temp_repo 2>/dev/null
             
             if [ -d "temp_repo" ]; then
               # カウント対象の拡張子を指定 (tsx, ts, js, jsx, html, css)
