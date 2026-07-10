@@ -1,4 +1,4 @@
-name: Count Web Lines Across Repos
+name: Debug and Count Web Lines
 
 on:
   workflow_dispatch:
@@ -14,7 +14,6 @@ jobs:
         run: |
           echo "=== 集計を開始します ==="
           
-          # 集計したいリポジトリ
           TARGETS="cosmo-base/library cosmo-base/opening cosmo-base/member_only cosmo-base/kpi-dashboard cosmo-base/event_database FSIFofficial/CosmoBase"
           
           TOTAL_TSX_TS=0
@@ -26,21 +25,28 @@ jobs:
             echo "-----------------------------------"
             echo "Checking: $TARGET"
             
-            # --vcs=git を正常に機能させるため、履歴も含めて通常クローンします
-            git clone https://github.com/${TARGET}.git temp_repo 2>/dev/null
+            git clone --depth 1 https://github.com/${TARGET}.git temp_repo 2>/dev/null
             
             if [ -d "temp_repo" ]; then
               cd temp_repo
               
-              # 【超重要】--vcs=git を指定することで、.gitignoreで除外されているファイルを完全無視します
-              JSON_DATA=$(cloc --vcs=git --include-ext=tsx,ts,js,jsx,html,css --json . 2>/dev/null)
+              # 【デバッグ】行数が多いファイルトップ5を画面に出して正体を暴く
+              echo "  [行数トップ5のファイル]"
+              find . -type f \( -name "*.tsx" -o -name "*.ts" -o -name "*.js" -o -name "*.jsx" -o -name "*.html" -o -name "*.css" \) ! -path '*/.*' | xargs wc -l 2>/dev/null | sort -nr | head -n 5 | sed 's/^/   /'
+              
+              # 【対策】明らかに怪しい自動生成ファイル（.next、.map、pnpm, パッケージ内のjs）を強制除外
+              # ※もしこれ以外に原因があれば、結果を見てここにフォルダ名を追加します
+              IGNORE_DIRS='(node_modules|dist|build|\.next|out|coverage|\.cache|\.vercel|public/build|static/bundles|\.git)'
+              IGNORE_FILES='(\.min\.js|\.bundle\.js|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|\.map)'
+              
+              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d="$IGNORE_DIRS" --not-match-f="$IGNORE_FILES" --json . 2>/dev/null)
               
               TS_LINES=$(echo "$JSON_DATA" | jq '.TypeScript?.code // 0')
               JS_LINES=$(echo "$JSON_DATA" | jq '.JavaScript?.code // 0')
               HTML_LINES=$(echo "$JSON_DATA" | jq '.HTML?.code // 0')
               CSS_LINES=$(echo "$JSON_DATA" | jq '.CSS?.code // 0')
 
-              echo "-> TSX/TS: $TS_LINES 行 | JS/JSX: $JS_LINES 行 | HTML: $HTML_LINES 行 | CSS: $CSS_LINES 行"
+              echo "-> 判定結果: TSX/TS: $TS_LINES 行 | JS/JSX: $JS_LINES 行 | HTML: $HTML_LINES 行 | CSS: $CSS_LINES 行"
               
               TOTAL_TSX_TS=$((TOTAL_TSX_TS + TS_LINES))
               TOTAL_JS_JSX=$((TOTAL_JS_JSX + JS_LINES))
@@ -57,7 +63,7 @@ jobs:
           GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
 
           echo "==================================="
-          echo "★全リポジトリの言語別・総合計行数（Git管理ファイルのみ）★"
+          echo "★全リポジトリの言語別・総合計行数★"
           echo "==================================="
           echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
           echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
