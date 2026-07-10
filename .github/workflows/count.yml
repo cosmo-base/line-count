@@ -14,10 +14,9 @@ jobs:
         run: |
           echo "=== 集計を開始します ==="
           
-          # 集計したいリポジトリを「アカウント名/リポジトリ名」で半角スペース区切りで並べます
+          # 集計したいリポジトリ
           TARGETS="cosmo-base/library cosmo-base/opening cosmo-base/member_only cosmo-base/kpi-dashboard cosmo-base/event_database FSIFofficial/CosmoBase"
           
-          # 各言語の合計を保持する変数を初期化
           TOTAL_TSX_TS=0
           TOTAL_JS_JSX=0
           TOTAL_HTML=0
@@ -30,11 +29,12 @@ jobs:
             git clone --depth 1 https://github.com/${TARGET}.git temp_repo 2>/dev/null
             
             if [ -d "temp_repo" ]; then
-              # カウント対象の拡張子を指定 (tsx, ts, js, jsx, html, css)
-              # node_modules などの不要フォルダは除外
-              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d='(node_modules|dist|build|.next)' --json temp_repo 2>/dev/null)
+              # 【強化】ビルド生成物やキャッシュ、パッケージ関連のフォルダを徹底除外
+              # node_modules, dist, build, .next に加え、out, coverage, .cache, .vercel などを追加
+              IGNORE_DIRS='(node_modules|dist|build|\.next|out|coverage|\.cache|\.vercel|public/build|static/bundles)'
               
-              # 各言語の実質コード行数（空白・コメント除く）を抽出して加算
+              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d="$IGNORE_DIRS" --json temp_repo 2>/dev/null)
+              
               TS_LINES=$(echo "$JSON_DATA" | jq '.TypeScript?.code // 0')
               JS_LINES=$(echo "$JSON_DATA" | jq '.JavaScript?.code // 0')
               HTML_LINES=$(echo "$JSON_DATA" | jq '.HTML?.code // 0')
@@ -53,11 +53,10 @@ jobs:
             fi
           done
 
-          # 総合計の計算
           GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
 
           echo "==================================="
-          echo "★全リポジトリの言語別・総合計行数★"
+          echo "★全リポジトリの言語別・総合計行数（ビルド除外版）★"
           echo "==================================="
           echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
           echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
