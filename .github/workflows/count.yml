@@ -1,4 +1,4 @@
-name: Count TSX Lines Across Repos
+name: Count Web Lines Across Repos
 
 on:
   workflow_dispatch:
@@ -13,36 +13,56 @@ jobs:
       - name: Fetch and Count
         run: |
           echo "=== 集計を開始します ==="
-          TOTAL_LINES=0
+          
+          # 集計したいリポジトリを「アカウント名/リポジトリ名」で半角スペース区切りで並べます
+          TARGETS="cosmo-base/library cosmo-base/opening cosmo-base/member_only cosmo-base/kpi-dashboard cosmo-base/event_database FSIFofficial/CosmoBase"
+          
+          # 各言語の合計を保持する変数を初期化
+          TOTAL_TSX_TS=0
+          TOTAL_JS_JSX=0
+          TOTAL_HTML=0
+          TOTAL_CSS=0
 
-          # 1. 【設定】あなたのご自身のGitHubアカウント名を入力してください
-          OWNER="cosmo-base"
-
-          # 2. 【設定】集計したいリポジトリ名をスペース区切りで入力してください
-          # (除外したいリポジトリはここに書かないだけで除外できます)
-          REPOS="library opening member_only kpi-dashboard"
-          for REPO in $REPOS; do
+          for TARGET in $TARGETS; do
             echo "-----------------------------------"
-            echo "Checking: $OWNER/$REPO"
+            echo "Checking: $TARGET"
             
-            # 公開リポジトリを一時クローン
-            git clone --depth 1 https://github.com/${OWNER}/${REPO}.git temp_repo 2>/dev/null            
+            git clone --depth 1 https://github.com{TARGET}.git temp_repo 2>/dev/null
+            
             if [ -d "temp_repo" ]; then
-              # node_modules などを除外して TSX/TS をカウント
-              LINES=$(cloc --include-ext=tsx,ts --not-match-d='(node_modules|dist|build)' --json temp_repo 2>/dev/null | jq '.TypeScript?.code // 0')
+              # カウント対象の拡張子を指定 (tsx, ts, js, jsx, html, css)
+              # node_modules などの不要フォルダは除外
+              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d='(node_modules|dist|build|.next)' --json temp_repo 2>/dev/null)
               
-              if [ "$LINES" -gt 0 ]; then
-                echo "-> TSX/TS lines: $LINES"
-                TOTAL_LINES=$((TOTAL_LINES + LINES))
-              else
-                echo "-> TSX/TS files not found or 0 lines."
-              fi
+              # 各言語の実質コード行数（空白・コメント除く）を抽出して加算
+              TS_LINES=$(echo "$JSON_DATA" | jq '.TypeScript?.code // 0')
+              JS_LINES=$(echo "$JSON_DATA" | jq '.JavaScript?.code // 0')
+              HTML_LINES=$(echo "$JSON_DATA" | jq '.HTML?.code // 0')
+              CSS_LINES=$(echo "$JSON_DATA" | jq '.CSS?.code // 0')
+
+              echo "-> TSX/TS: $TS_LINES 行 | JS/JSX: $JS_LINES 行 | HTML: $HTML_LINES 行 | CSS: $CSS_LINES 行"
+              
+              TOTAL_TSX_TS=$((TOTAL_TSX_TS + TS_LINES))
+              TOTAL_JS_JSX=$((TOTAL_JS_JSX + JS_LINES))
+              TOTAL_HTML=$((TOTAL_HTML + HTML_LINES))
+              TOTAL_CSS=$((TOTAL_CSS + CSS_LINES))
+
               rm -rf temp_repo
             else
-              echo "-> [Error] リポジトリが非公開（プライベート）か、名前が間違っているため取得できませんでした。"
+              echo "-> [Error] リポジトリの取得に失敗しました。"
             fi
           done
 
+          # 総合計の計算
+          GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
+
           echo "==================================="
-          echo "★全リポジトリのTSX/TS総行数: $TOTAL_LINES 行"
+          echo "★全リポジトリの言語別・総合計行数★"
+          echo "==================================="
+          echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
+          echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
+          echo " HTML                : $TOTAL_HTML 行"
+          echo " CSS                 : $TOTAL_CSS 行"
+          echo "-----------------------------------"
+          echo " 全言語の総合計行数  : $GRAND_TOTAL 行"
           echo "==================================="
