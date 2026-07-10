@@ -1,4 +1,4 @@
-name: Super Clean Code Counter (NodeJS)
+name: Super Clean Code Counter (Final)
 
 on:
   workflow_dispatch:
@@ -10,26 +10,74 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
-      - name: Fetch and Count
+      # 各リポジトリを一時的にダウンロードする場所を作っておく
+      - name: Create Workspace
+        run: mkdir -p workspace_repos
+
+      # 1. cosmo-base/library のダウンロードと計算
+      - name: Checkout library
+        uses: actions/checkout@v4
+        with:
+          repository: 'cosmo-base/library'
+          path: 'workspace_repos/library'
+          fail-fast: false
+
+      # 2. cosmo-base/opening のダウンロードと計算
+      - name: Checkout opening
+        uses: actions/checkout@v4
+        with:
+          repository: 'cosmo-base/opening'
+          path: 'workspace_repos/opening'
+          fail-fast: false
+
+      # 3. cosmo-base/member_only のダウンロードと計算
+      - name: Checkout member_only
+        uses: actions/checkout@v4
+        with:
+          repository: 'cosmo-base/member_only'
+          path: 'workspace_repos/member_only'
+          fail-fast: false
+
+      # 4. cosmo-base/kpi-dashboard のダウンロードと計算
+      - name: Checkout kpi-dashboard
+        uses: actions/checkout@v4
+        with:
+          repository: 'cosmo-base/kpi-dashboard'
+          path: 'workspace_repos/kpi-dashboard'
+          fail-fast: false
+
+      # 5. cosmo-base/event_database のダウンロードと計算
+      - name: Checkout event_database
+        uses: actions/checkout@v4
+        with:
+          repository: 'cosmo-base/event_database'
+          path: 'workspace_repos/event_database'
+          fail-fast: false
+
+      # 6. FSIFofficial/CosmoBase のダウンロードと計算
+      - name: Checkout CosmoBase
+        uses: actions/checkout@v4
+        with:
+          repository: 'FSIFofficial/CosmoBase'
+          path: 'workspace_repos/CosmoBase'
+          fail-fast: false
+
+      # 安全にダウンロードされたファイルたちをNode.jsで超精密に集計
+      - name: Run Count Logic
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const { execSync } = require('child_process');
 
-            const targets = [
-              "cosmo-base/library",
-              "cosmo-base/opening",
-              "cosmo-base/member_only",
-              "cosmo-base/kpi-dashboard",
-              "cosmo-base/event_database",
-              "FSIFofficial/CosmoBase"
-            ];
+            const baseDir = 'workspace_repos';
+            if (!fs.existsSync(baseDir)) {
+              console.log("エラー: ワークスペースが存在しません。");
+              return;
+            }
 
-            // 除外するフォルダ・ファイル
             const ignoreDirs = ['node_modules', 'dist', 'build', '.next', 'out', 'coverage', '.cache', '.vercel', 'public/build', 'static/bundles', '.git'];
             const ignoreFiles = ['.min.js', '.bundle.js', 'pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', '.map'];
 
@@ -38,7 +86,6 @@ jobs:
             function countFileLines(filePath) {
               try {
                 const content = fs.readFileSync(filePath, 'utf-8');
-                // 空行を除外してカウント
                 return content.split('\n').filter(line => line.trim().length > 0).length;
               } catch (e) {
                 return 0;
@@ -46,6 +93,7 @@ jobs:
             }
 
             function walkDir(dir, repoStats) {
+              if (!fs.existsSync(dir)) return;
               const files = fs.readdirSync(dir);
               for (const file of files) {
                 const fullPath = path.join(dir, file);
@@ -70,28 +118,20 @@ jobs:
 
             console.log("=== 集計を開始します ===");
 
-            for (const target of targets) {
+            const targets = fs.readdirSync(baseDir);
+            for (const repoName of targets) {
               console.log(`-----------------------------------`);
-              console.log(`Checking: ${target}`);
+              console.log(`Analyzing: ${repoName}`);
               
-              const tempDir = `temp_repo_${Date.now()}`;
-              try {
-                execSync(`git clone --depth 1 https://github.com{target}.git ${tempDir}`, { stdio: 'ignore' });
-                
-                let repoStats = { ts: 0, js: 0, html: 0, css: 0 };
-                walkDir(tempDir, repoStats);
-                
-                console.log(`-> TSX/TS: ${repoStats.ts} 行 | JS/JSX: ${repoStats.js} 行 | HTML: ${repoStats.html} 行 | CSS: ${repoStats.css} 行`);
-                
-                totals.ts += repoStats.ts;
-                totals.js += repoStats.js;
-                totals.html += repoStats.html;
-                totals.css += repoStats.css;
-                
-                fs.rmSync(tempDir, { recursive: true, force: true });
-              } catch (err) {
-                console.log(`-> [Error] リポジトリの取得または解析に失敗しました。`);
-              }
+              let repoStats = { ts: 0, js: 0, html: 0, css: 0 };
+              walkDir(path.join(baseDir, repoName), repoStats);
+              
+              console.log(`-> TSX/TS: ${repoStats.ts} 行 | JS/JSX: ${repoStats.js} 行 | HTML: ${repoStats.html} 行 | CSS: ${repoStats.css} 行`);
+              
+              totals.ts += repoStats.ts;
+              totals.js += repoStats.js;
+              totals.html += repoStats.html;
+              totals.css += repoStats.css;
             }
 
             const grandTotal = totals.ts + totals.js + totals.html + totals.css;
