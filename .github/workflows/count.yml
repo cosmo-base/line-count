@@ -9,14 +9,15 @@ jobs:
     steps:
       - name: Fetch and Count
         run: |
-          echo "=== 集計を開始します（バグ回避版） ==="
+          echo "=== 集計を開始します（バグ修正版） ==="
           
           TARGETS="cosmo-base/library cosmo-base/opening cosmo-base/member_only cosmo-base/kpi-dashboard cosmo-base/event_database FSIFofficial/CosmoBase"
           
-          TOTAL_TSX_TS=0
-          TOTAL_JS_JSX=0
-          TOTAL_HTML=0
-          TOTAL_CSS=0
+          # 一時的に数値を記録するファイルを作成
+          echo 0 > ts_total.txt
+          echo 0 > js_total.txt
+          echo 0 > html_total.txt
+          echo 0 > css_total.txt
 
           for TARGET in $TARGETS; do
             echo "-----------------------------------"
@@ -27,22 +28,22 @@ jobs:
             if [ -d "temp_repo" ]; then
               cd temp_repo
               
-              # 1. 不要なフォルダ（.nextやnode_modulesなど）を物理的に削除して判定から完全に排除
+              # 不要なフォルダを完全に削除
               rm -rf node_modules dist build .next out coverage .cache .vercel public/build static/bundles .git 2>/dev/null
               
-              # 2. 拡張子ごとに、空白行を含まない「純粋なコード行数」を厳密にカウント
-              # (grep . で空行を除外しています)
-              TS_LINES=$(find . -type f \( -name "*.tsx" -o -name "*.ts" \) 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
-              JS_LINES=$(find . -type f \( -name "*.jsx" -o -name "*.js" \) ! -name "*.min.js" 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
-              HTML_LINES=$(find . -type f -name "*.html" 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
-              CSS_LINES=$(find . -type f -name "*.css" 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
+              # 拡張子ごとに行数をカウント（ファイルが空・存在しない場合も確実に0を返す安全設計）
+              TS_LINES=$(find . -type f \( -name "*.tsx" -o -name "*.ts" \) -exec cat {} + 2>/dev/null | grep -c . || echo 0)
+              JS_LINES=$(find . -type f \( -name "*.jsx" -o -name "*.js" \) -not -name "*.min.js" -exec cat {} + 2>/dev/null | grep -c . || echo 0)
+              HTML_LINES=$(find . -type f -name "*.html" -exec cat {} + 2>/dev/null | grep -c . || echo 0)
+              CSS_LINES=$(find . -type f -name "*.css" -exec cat {} + 2>/dev/null | grep -c . || echo 0)
 
               echo "-> TSX/TS: $TS_LINES 行 | JS/JSX: $JS_LINES 行 | HTML: $HTML_LINES 行 | CSS: $CSS_LINES 行"
               
-              TOTAL_TSX_TS=$((TOTAL_TSX_TS + TS_LINES))
-              TOTAL_JS_JSX=$((TOTAL_JS_JSX + JS_LINES))
-              TOTAL_HTML=$((TOTAL_HTML + HTML_LINES))
-              TOTAL_CSS=$((TOTAL_CSS + CSS_LINES))
+              # 各リポジトリの数値をファイルに加算して保持
+              echo "$(($(cat ../ts_total.txt) + TS_LINES))" > ../ts_total.txt
+              echo "$(($(cat ../js_total.txt) + JS_LINES))" > ../js_total.txt
+              echo "$(($(cat ../html_total.txt) + HTML_LINES))" > ../html_total.txt
+              echo "$(($(cat ../css_total.txt) + CSS_LINES))" > ../css_total.txt
 
               cd ..
               rm -rf temp_repo
@@ -51,10 +52,18 @@ jobs:
             fi
           done
 
+          # 最終集計の読み込み
+          TOTAL_TSX_TS=$(cat ts_total.txt)
+          TOTAL_JS_JSX=$(cat js_total.txt)
+          TOTAL_HTML=$(cat html_total.txt)
+          TOTAL_CSS=$(cat css_total.txt)
           GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
 
+          # 一時ファイルの削除
+          rm -f ts_total.txt js_total.txt html_total.txt css_total.txt
+
           echo "==================================="
-          echo "★全リポジトリの言語別・総合計行数（確定版）★"
+          echo "★全リポジトリの言語別・総合計行数★"
           echo "==================================="
           echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
           echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
