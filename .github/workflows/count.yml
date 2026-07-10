@@ -20,8 +20,7 @@ jobs:
 
           # 2. 【設定】集計したいリポジトリ名をスペース区切りで入力してください
           # (除外したいリポジトリはここに書かないだけで除外できます)
-          REPOS="library　opening　member_only　kpi-dashboard event_database"
-
+          REPOS="library opening member_only kpi-dashboard"
           for REPO in $REPOS; do
             echo "-----------------------------------"
             echo "Checking: $OWNER/$REPO"
