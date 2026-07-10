@@ -29,11 +29,14 @@ jobs:
             git clone --depth 1 https://github.com/${TARGET}.git temp_repo 2>/dev/null
             
             if [ -d "temp_repo" ]; then
-              # 【強化】ビルド生成物やキャッシュ、パッケージ関連のフォルダを徹底除外
-              # node_modules, dist, build, .next に加え、out, coverage, .cache, .vercel などを追加
+              # 1. 除外したいフォルダのリスト（.next/dev もこれで丸ごと消えます）
               IGNORE_DIRS='(node_modules|dist|build|\.next|out|coverage|\.cache|\.vercel|public/build|static/bundles)'
               
-              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d="$IGNORE_DIRS" --json temp_repo 2>/dev/null)
+              # 2. 【追加】除外したいファイル名のパターン（圧縮されたビルド成果物や設定ファイルを排除）
+              IGNORE_FILES='(\.min\.js|\.bundle\.js|pnpm-lock\.yaml|package-lock\.json|yarn\.lock)'
+              
+              # クラスカウントを実行
+              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d="$IGNORE_DIRS" --not-match-f="$IGNORE_FILES" --json temp_repo 2>/dev/null)
               
               TS_LINES=$(echo "$JSON_DATA" | jq '.TypeScript?.code // 0')
               JS_LINES=$(echo "$JSON_DATA" | jq '.JavaScript?.code // 0')
@@ -56,7 +59,7 @@ jobs:
           GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
 
           echo "==================================="
-          echo "★全リポジトリの言語別・総合計行数（ビルド除外版）★"
+          echo "★全リポジトリの言語別・総合計行数（ビルド・圧縮ファイル完全除外版）★"
           echo "==================================="
           echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
           echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
