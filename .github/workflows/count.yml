@@ -1,4 +1,4 @@
-name: Super Clean Code Counter
+name: Super Clean Code Counter (NodeJS)
 
 on:
   workflow_dispatch:
@@ -7,68 +7,102 @@ jobs:
   count-lines:
     runs-on: ubuntu-latest
     steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Fetch and Count
-        run: |
-          echo "=== 集計を開始します（バグ修正版） ==="
-          
-          TARGETS="cosmo-base/library cosmo-base/opening cosmo-base/member_only cosmo-base/kpi-dashboard cosmo-base/event_database FSIFofficial/CosmoBase"
-          
-          # 一時的に数値を記録するファイルを作成
-          echo 0 > ts_total.txt
-          echo 0 > js_total.txt
-          echo 0 > html_total.txt
-          echo 0 > css_total.txt
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { execSync } = require('child_process');
 
-          for TARGET in $TARGETS; do
-            echo "-----------------------------------"
-            echo "Checking: $TARGET"
-            
-            git clone --depth 1 https://github.com/${TARGET}.git temp_repo 2>/dev/null
-            
-            if [ -d "temp_repo" ]; then
-              cd temp_repo
+            const targets = [
+              "cosmo-base/library",
+              "cosmo-base/opening",
+              "cosmo-base/member_only",
+              "cosmo-base/kpi-dashboard",
+              "cosmo-base/event_database",
+              "FSIFofficial/CosmoBase"
+            ];
+
+            // 除外するフォルダ・ファイル
+            const ignoreDirs = ['node_modules', 'dist', 'build', '.next', 'out', 'coverage', '.cache', '.vercel', 'public/build', 'static/bundles', '.git'];
+            const ignoreFiles = ['.min.js', '.bundle.js', 'pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', '.map'];
+
+            let totals = { ts: 0, js: 0, html: 0, css: 0 };
+
+            function countFileLines(filePath) {
+              try {
+                const content = fs.readFileSync(filePath, 'utf-8');
+                // 空行を除外してカウント
+                return content.split('\n').filter(line => line.trim().length > 0).length;
+              } catch (e) {
+                return 0;
+              }
+            }
+
+            function walkDir(dir, repoStats) {
+              const files = fs.readdirSync(dir);
+              for (const file of files) {
+                const fullPath = path.join(dir, file);
+                const stat = fs.statSync(fullPath);
+
+                if (stat.isDirectory()) {
+                  if (ignoreDirs.includes(file)) continue;
+                  walkDir(fullPath, repoStats);
+                } else if (stat.isFile()) {
+                  if (ignoreFiles.some(ext => file.endsWith(ext))) continue;
+
+                  const ext = path.extname(file);
+                  const lines = countFileLines(fullPath);
+
+                  if (['.tsx', '.ts'].includes(ext)) repoStats.ts += lines;
+                  else if (['.jsx', '.js'].includes(ext)) repoStats.js += lines;
+                  else if (ext === '.html') repoStats.html += lines;
+                  else if (ext === '.css') repoStats.css += lines;
+                }
+              }
+            }
+
+            console.log("=== 集計を開始します ===");
+
+            for (const target of targets) {
+              console.log(`-----------------------------------`);
+              console.log(`Checking: ${target}`);
               
-              # 不要なフォルダを完全に削除
-              rm -rf node_modules dist build .next out coverage .cache .vercel public/build static/bundles .git 2>/dev/null
-              
-              # 拡張子ごとに行数をカウント（ファイルが空・存在しない場合も確実に0を返す安全設計）
-              TS_LINES=$(find . -type f \( -name "*.tsx" -o -name "*.ts" \) -exec cat {} + 2>/dev/null | grep -c . || echo 0)
-              JS_LINES=$(find . -type f \( -name "*.jsx" -o -name "*.js" \) -not -name "*.min.js" -exec cat {} + 2>/dev/null | grep -c . || echo 0)
-              HTML_LINES=$(find . -type f -name "*.html" -exec cat {} + 2>/dev/null | grep -c . || echo 0)
-              CSS_LINES=$(find . -type f -name "*.css" -exec cat {} + 2>/dev/null | grep -c . || echo 0)
+              const tempDir = `temp_repo_${Date.now()}`;
+              try {
+                execSync(`git clone --depth 1 https://github.com{target}.git ${tempDir}`, { stdio: 'ignore' });
+                
+                let repoStats = { ts: 0, js: 0, html: 0, css: 0 };
+                walkDir(tempDir, repoStats);
+                
+                console.log(`-> TSX/TS: ${repoStats.ts} 行 | JS/JSX: ${repoStats.js} 行 | HTML: ${repoStats.html} 行 | CSS: ${repoStats.css} 行`);
+                
+                totals.ts += repoStats.ts;
+                totals.js += repoStats.js;
+                totals.html += repoStats.html;
+                totals.css += repoStats.css;
+                
+                fs.rmSync(tempDir, { recursive: true, force: true });
+              } catch (err) {
+                console.log(`-> [Error] リポジトリの取得または解析に失敗しました。`);
+              }
+            }
 
-              echo "-> TSX/TS: $TS_LINES 行 | JS/JSX: $JS_LINES 行 | HTML: $HTML_LINES 行 | CSS: $CSS_LINES 行"
-              
-              # 各リポジトリの数値をファイルに加算して保持
-              echo "$(($(cat ../ts_total.txt) + TS_LINES))" > ../ts_total.txt
-              echo "$(($(cat ../js_total.txt) + JS_LINES))" > ../js_total.txt
-              echo "$(($(cat ../html_total.txt) + HTML_LINES))" > ../html_total.txt
-              echo "$(($(cat ../css_total.txt) + CSS_LINES))" > ../css_total.txt
+            const grandTotal = totals.ts + totals.js + totals.html + totals.css;
 
-              cd ..
-              rm -rf temp_repo
-            else
-              echo "-> [Error] リポジトリの取得に失敗しました。"
-            fi
-          done
-
-          # 最終集計の読み込み
-          TOTAL_TSX_TS=$(cat ts_total.txt)
-          TOTAL_JS_JSX=$(cat js_total.txt)
-          TOTAL_HTML=$(cat html_total.txt)
-          TOTAL_CSS=$(cat css_total.txt)
-          GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
-
-          # 一時ファイルの削除
-          rm -f ts_total.txt js_total.txt html_total.txt css_total.txt
-
-          echo "==================================="
-          echo "★全リポジトリの言語別・総合計行数★"
-          echo "==================================="
-          echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
-          echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
-          echo " HTML                : $TOTAL_HTML 行"
-          echo " CSS                 : $TOTAL_CSS 行"
-          echo "-----------------------------------"
-          echo " 全言語の総合計行数  : $GRAND_TOTAL 行"
-          echo "==================================="
+            console.log("===================================");
+            console.log("★全リポジトリの言語別・総合計行数（確定版）★");
+            console.log("===================================");
+            console.log(` TypeScript (TSX/TS) : ${totals.ts} 行`);
+            console.log(` JavaScript (JS/JSX) : ${totals.js} 行`);
+            console.log(` HTML                : ${totals.html} 行`);
+            console.log(` CSS                 : ${totals.css} 行`);
+            console.log("-----------------------------------");
+            console.log(` 全言語の総合計行数  : ${grandTotal} 行`);
+            console.log("===================================");
