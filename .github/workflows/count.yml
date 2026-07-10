@@ -26,7 +26,7 @@ jobs:
             echo "Checking: $OWNER/$REPO"
             
             # 公開リポジトリを一時クローン
-            git clone --depth 1 https://github.com{OWNER}/${REPO}.git temp_repo 2>/dev/null            
+            git clone --depth 1 https://github.com/${OWNER}/${REPO}.git temp_repo 2>/dev/null            
             if [ -d "temp_repo" ]; then
               # node_modules などを除外して TSX/TS をカウント
               LINES=$(cloc --include-ext=tsx,ts --not-match-d='(node_modules|dist|build)' --json temp_repo 2>/dev/null | jq '.TypeScript?.code // 0')
