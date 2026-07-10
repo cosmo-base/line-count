@@ -1,4 +1,4 @@
-name: Debug and Count Web Lines
+name: Super Clean Code Counter
 
 on:
   workflow_dispatch:
@@ -7,12 +7,9 @@ jobs:
   count-lines:
     runs-on: ubuntu-latest
     steps:
-      - name: Install cloc
-        run: sudo apt-get install -y cloc
-
       - name: Fetch and Count
         run: |
-          echo "=== 集計を開始します ==="
+          echo "=== 集計を開始します（バグ回避版） ==="
           
           TARGETS="cosmo-base/library cosmo-base/opening cosmo-base/member_only cosmo-base/kpi-dashboard cosmo-base/event_database FSIFofficial/CosmoBase"
           
@@ -30,23 +27,17 @@ jobs:
             if [ -d "temp_repo" ]; then
               cd temp_repo
               
-              # 【デバッグ】行数が多いファイルトップ5を画面に出して正体を暴く
-              echo "  [行数トップ5のファイル]"
-              find . -type f \( -name "*.tsx" -o -name "*.ts" -o -name "*.js" -o -name "*.jsx" -o -name "*.html" -o -name "*.css" \) ! -path '*/.*' | xargs wc -l 2>/dev/null | sort -nr | head -n 5 | sed 's/^/   /'
+              # 1. 不要なフォルダ（.nextやnode_modulesなど）を物理的に削除して判定から完全に排除
+              rm -rf node_modules dist build .next out coverage .cache .vercel public/build static/bundles .git 2>/dev/null
               
-              # 【対策】明らかに怪しい自動生成ファイル（.next、.map、pnpm, パッケージ内のjs）を強制除外
-              # ※もしこれ以外に原因があれば、結果を見てここにフォルダ名を追加します
-              IGNORE_DIRS='(node_modules|dist|build|\.next|out|coverage|\.cache|\.vercel|public/build|static/bundles|\.git)'
-              IGNORE_FILES='(\.min\.js|\.bundle\.js|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|\.map)'
-              
-              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d="$IGNORE_DIRS" --not-match-f="$IGNORE_FILES" --json . 2>/dev/null)
-              
-              TS_LINES=$(echo "$JSON_DATA" | jq '.TypeScript?.code // 0')
-              JS_LINES=$(echo "$JSON_DATA" | jq '.JavaScript?.code // 0')
-              HTML_LINES=$(echo "$JSON_DATA" | jq '.HTML?.code // 0')
-              CSS_LINES=$(echo "$JSON_DATA" | jq '.CSS?.code // 0')
+              # 2. 拡張子ごとに、空白行を含まない「純粋なコード行数」を厳密にカウント
+              # (grep . で空行を除外しています)
+              TS_LINES=$(find . -type f \( -name "*.tsx" -o -name "*.ts" \) 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
+              JS_LINES=$(find . -type f \( -name "*.jsx" -o -name "*.js" \) ! -name "*.min.js" 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
+              HTML_LINES=$(find . -type f -name "*.html" 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
+              CSS_LINES=$(find . -type f -name "*.css" 2>/dev/null | xargs cat 2>/dev/null | grep -c . || echo 0)
 
-              echo "-> 判定結果: TSX/TS: $TS_LINES 行 | JS/JSX: $JS_LINES 行 | HTML: $HTML_LINES 行 | CSS: $CSS_LINES 行"
+              echo "-> TSX/TS: $TS_LINES 行 | JS/JSX: $JS_LINES 行 | HTML: $HTML_LINES 行 | CSS: $CSS_LINES 行"
               
               TOTAL_TSX_TS=$((TOTAL_TSX_TS + TS_LINES))
               TOTAL_JS_JSX=$((TOTAL_JS_JSX + JS_LINES))
@@ -63,7 +54,7 @@ jobs:
           GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
 
           echo "==================================="
-          echo "★全リポジトリの言語別・総合計行数★"
+          echo "★全リポジトリの言語別・総合計行数（確定版）★"
           echo "==================================="
           echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
           echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
