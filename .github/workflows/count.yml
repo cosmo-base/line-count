@@ -26,17 +26,14 @@ jobs:
             echo "-----------------------------------"
             echo "Checking: $TARGET"
             
-            git clone --depth 1 https://github.com/${TARGET}.git temp_repo 2>/dev/null
+            # --vcs=git を正常に機能させるため、履歴も含めて通常クローンします
+            git clone https://github.com/${TARGET}.git temp_repo 2>/dev/null
             
             if [ -d "temp_repo" ]; then
-              # 1. 除外したいフォルダのリスト（.next/dev もこれで丸ごと消えます）
-              IGNORE_DIRS='(node_modules|dist|build|\.next|out|coverage|\.cache|\.vercel|public/build|static/bundles)'
+              cd temp_repo
               
-              # 2. 【追加】除外したいファイル名のパターン（圧縮されたビルド成果物や設定ファイルを排除）
-              IGNORE_FILES='(\.min\.js|\.bundle\.js|pnpm-lock\.yaml|package-lock\.json|yarn\.lock)'
-              
-              # クラスカウントを実行
-              JSON_DATA=$(cloc --include-ext=tsx,ts,js,jsx,html,css --not-match-d="$IGNORE_DIRS" --not-match-f="$IGNORE_FILES" --json temp_repo 2>/dev/null)
+              # 【超重要】--vcs=git を指定することで、.gitignoreで除外されているファイルを完全無視します
+              JSON_DATA=$(cloc --vcs=git --include-ext=tsx,ts,js,jsx,html,css --json . 2>/dev/null)
               
               TS_LINES=$(echo "$JSON_DATA" | jq '.TypeScript?.code // 0')
               JS_LINES=$(echo "$JSON_DATA" | jq '.JavaScript?.code // 0')
@@ -50,6 +47,7 @@ jobs:
               TOTAL_HTML=$((TOTAL_HTML + HTML_LINES))
               TOTAL_CSS=$((TOTAL_CSS + CSS_LINES))
 
+              cd ..
               rm -rf temp_repo
             else
               echo "-> [Error] リポジトリの取得に失敗しました。"
@@ -59,7 +57,7 @@ jobs:
           GRAND_TOTAL=$((TOTAL_TSX_TS + TOTAL_JS_JSX + TOTAL_HTML + TOTAL_CSS))
 
           echo "==================================="
-          echo "★全リポジトリの言語別・総合計行数（ビルド・圧縮ファイル完全除外版）★"
+          echo "★全リポジトリの言語別・総合計行数（Git管理ファイルのみ）★"
           echo "==================================="
           echo " TypeScript (TSX/TS) : $TOTAL_TSX_TS 行"
           echo " JavaScript (JS/JSX) : $TOTAL_JS_JSX 行"
